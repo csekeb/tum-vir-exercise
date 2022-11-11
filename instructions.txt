@@ -1,0 +1,7 @@
+Install:
+- clone repository: git clone git@gitlab.com:csekeb/tsm.git
+- create a virtual environment, e.g.: python -m venv [your-fav-name] 
+- activate env and install required packages: pip install -r requirements.txt
+Todo:
+- read docs on dir "text" for instructions and home work questions
+

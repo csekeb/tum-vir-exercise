@@ -1,0 +1,41 @@
+model:
+  encoder:
+    shape_input: [784]
+    shape_output: [32]
+    arch: [["linear1","Linear",[784, 512], {}],
+           ["lrelu1","LeakyReLU", [0.1], {}],
+           ["linear2","Linear",[512, 512], {}],
+           ["lrelu2","LeakyReLU", [0.1], {}],
+           ["linear3","Linear",[512, 512], {}],
+           ["lrelu3","LeakyReLU", [0.1], {}],
+           ["linear4","Linear",[512, 32], {}]]
+  decoder:
+    shape_input: [16]
+    shape_output: [784]
+    arch: [["linear1","Linear",[16, 512], {}],
+           ["lrelu1","LeakyReLU", [0.1], {}],
+           ["linear2","Linear",[512, 512], {}],
+           ["lrelu2","LeakyReLU", [0.1], {}],
+           ["linear3","Linear",[512, 512], {}],
+           ["lrelu4","LeakyReLU", [0.1], {}],
+           ["linear4","Linear",[512, 784], {}],
+           ["tanh","Tanh",[], {}]]
+  n_samples: 16
+  seed_everything: 1891
+optimizers:
+  lr: 0.0005
+  b1: 0.5  
+  b2: 0.999
+saving:
+  save_path: "runs/models/example_vae"
+data:
+  data_dir: "datasets/MNIST"
+  batch_size: 256
+trainer:
+  gpus: []
+  max_epochs: 200
+  default_root_dir: "runs/logs/example_vae"
+
+
+
+

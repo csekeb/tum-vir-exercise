@@ -1,0 +1,10 @@
+numpy
+scipy
+matplotlib
+torch
+torchvision
+tensorboard
+pytorch-lightning
+notebook
+python-box 
+PyYAML
