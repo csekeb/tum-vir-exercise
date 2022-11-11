@@ -5,7 +5,7 @@
 The logistic regression model is a Bayesian classification model 
 $$
 \begin{align}
-	p(Y, w \vert X) &= p(w) \times \prod_{i=1}^{n} p(y_i \vert x_i, w)
+	p(Y, w \vert X) &= p(w) \: \prod_{i=1}^{n} p(y_i \vert x_i, w)
   \\
   & =\mathcal{N}(w; 0, \sigma_{\mathrm{prior}}\: I_d) \: \prod_{i=1}^{n}\mathrm{Bernoulli}(y_i; x_i w )
 \end{align}
@@ -68,64 +68,10 @@ where $\{\tilde{u}_k, w_k\}_{k=1}^{K}$ are the weights and nodes of the univaria
 
 ### Key variational inference concepts to learn from this model
 
-The approximation of the EBLO objective in implemented in `model_logred_mvn.py`  in lines
+The approximation of the EBLO objective in implemented in `model_logred_mvn.py`  in the function.
 
 ```
-    def loss(self, features, labels):
-        # computing expected negative log likelihood
-        # reparameterisation of stochastic variables
-        L       = self.weights_chol() 
-        p_post    = MultivariateNormal(loc=self.weights_loc.squeeze(), scale_tril=L)
-
-        # local reparameterisation and MCsampling
-        z_loc     = torch.matmul(features, self.weights_loc).squeeze()
-        z_scale   = torch.sqrt(torch.sum(torch.matmul(features, L)**2, dim=-1, keepdim=True)).squeeze()
-        z_samples = Normal(loc=z_loc, scale=z_scale).rsample([self.n_samples_mc]).transpose(0,1)
-
-        # data distribution via MC samples
-        p_labels   = Bernoulli(logits=z_samples)
-        # computing the MC samples based expected log likelihood with batch learning correction
-        logp_expct = self.size_data*torch.mean(p_labels.log_prob(labels.repeat((1, self.n_samples_mc))))
-
-        # compute KL
-        p_prior = MultivariateNormal(loc=torch.zeros_like(self.weights_scale_logdiag),                                        										scale_tril=self.scale_prior*torch.diag(torch.ones_like(self.weights_scale_logdiag)))
-        kl_div  = kl_divergence(p_post, p_prior) 
-
-        # compute negative ELBO
-        loss = -logp_expct + kl_div
-
-        return loss, logp_expct, kl_div 
-
-   
-
-```
-
-#### Batch learning
-
-For large datasets we cannot use all data in training therefore we use the approximation
-$$
-\begin{align}
-	\sum_{i=1}^{n}\mathbb{E}_{q_{\phi}(w)}[\log p(y_i \vert x_i, w)]  \approx n \frac{1}{\vert S\vert} \sum_{s \in S}\mathbb{E}_{q_{\phi}(w)}[\log p(y_i \vert x_s, w)]
-\end{align}
-$$
-that is, we approximate the objective by using only a random subset $S \subset \{1, \ldots, N\}$ to represent the dataset. This makes the objective stochastic w.r.t. sampling $S$ but with the right optimisation procedure convergence can still be achieved. 
-
-**Implementation** This is implemented via the `DataModuleFromNPZ` in `run.py` which uses data batches of size `size_batch`
-
-```
-    dm = DataModuleFromNPZ(
-        data_dir="data_logistic_regression_2d",
-        feature_labels=["inputs", "targets"],
-        batch_size=64,
-        num_workers=4,
-        shuffle_training=False
-    )
-```
-
-and the code line 
-
-```
-logp_expct = self.size_data*torch.mean(p_labels.log_prob(labels.repeat((1, self.n_samples_mc))))
+loss(self, features, labels):
 ```
 
 #### Stochastic gradient learning
@@ -143,8 +89,6 @@ that is, we sample $R$ samples $w_r \sim q(w)$ and average. This again makes the
 ```
 logp_expct = self.size_data*torch.mean(p_labels.log_prob(labels.repeat((1, self.n_samples_mc))))
 ```
-
-
 
 #### Reparameterisation of stochastic variables
 
@@ -220,7 +164,35 @@ thus significantly reducing the variance of the stochastic approximation of the 
         logp_expct = self.size_data*torch.mean(p_labels.log_prob(labels.repeat((1, self.n_samples_mc))))
 ```
 
+#### Batch learning
 
+For large datasets we cannot use all data in training therefore we use the approximation
+$$
+\begin{align}
+	\sum_{i=1}^{n}\mathbb{E}_{q_{\phi}(w)}[\log p(y_i \vert x_i, w)]  \approx n \frac{1}{\vert S\vert} \sum_{s \in S}\mathbb{E}_{q_{\phi}(w)}[\log p(y_i \vert x_s, w)]
+\end{align}
+$$
+that is, we approximate the objective by using only a random subset $S \subset \{1, \ldots, N\}$ to represent the dataset. This makes the objective stochastic w.r.t. sampling $S$ but with the right optimisation procedure convergence can still be achieved. 
+
+**Implementation** This is implemented via the `DataModuleFromNPZ` in `run.py` which uses data batches of size `size_batch`
+
+```
+    dm = DataModuleFromNPZ(
+        data_dir="data_logistic_regression_2d",
+        feature_labels=["inputs", "targets"],
+        batch_size=64,
+        num_workers=4,
+        shuffle_training=False
+    )
+```
+
+and the code line 
+
+```
+logp_expct = self.size_data*torch.mean(p_labels.log_prob(labels.repeat((1, self.n_samples_mc))))
+```
+
+#### 
 
 ### Questions and tasks
 
