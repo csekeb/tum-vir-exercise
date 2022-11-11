@@ -48,14 +48,26 @@ class DataModuleFromNPZ(LightningDataModule):
             self.data_validate = DatasetFromNPZ(os.path.join(self.data_dir, "validate"),
                                                 feature_labels=self.feature_labels,
                                                 file_ext=self.file_ext)
+            if self.batch_size == -1:
+                self.batch_size = int(np.max([len(self.data_train), len(self.data_validate)]))
+
 
         # Assign test dataset for use in dataloader(s)
         if stage == 'test' or stage is None:
             self.data_test = DatasetFromNPZ(os.path.join(self.data_dir, "test"),
                                             feature_labels=self.feature_labels,
                                             file_ext=self.file_ext)
-        if self.batch_size == -1:
-            self.batch_size = len(self.data_train)
+            if self.batch_size == -1:
+                self.batch_size = len(self.data_test)
+    
+    def size_train(self):
+        return len(self.data_train)
+
+    def size_validate(self):
+        return len(self.data_validate)
+
+    def size_test(self):
+        return len(self.data_test)
 
     def train_dataloader(self):
         return DataLoader(self.data_train,

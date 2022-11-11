@@ -41,8 +41,6 @@ class Encoder(nn.Module):
         self.d_state = config.shape_output[-1] // 2
 
     def forward(self, data):
-        #input  = data.view(data.size(0), *self.config.shape_input)
-        #output = self.model(input).view(data.size(0),*self.config.shape_output)
         input  = data
         output = self.model(input)
         loc, scale_isp = torch.split(output, [self.d_state, self.d_state], dim=-1)
@@ -60,10 +58,7 @@ class Decoder(nn.Module):
                         [(name, getattr(nn, fname)(*args, **kwargs)) for name, fname, args, kwargs in config.arch]))
         self.scale_isp = nn.Parameter(0.5*torch.ones(1), requires_grad=True)
 
-    def forward(self, state):
-        #input  = state.view(state.size(0), *self.config.shape_input)
-        #loc   = self.loc(input).view(state.size(0),*self.config.shape_output)
-        input = state
+    def forward(self, input):
         loc   = self.loc(input)
         scale = STD_MIN + torch.nn.functional.softplus(self.scale_isp) * torch.ones(loc.shape, device=loc.device)
         
@@ -225,6 +220,7 @@ class ModelVae(LightningModule):
     def loss(self, imgs):
         size_batch = imgs.size(0)
 
+        # define proior
         if self.shape_data == None:
             self.shape_data = list(imgs.shape[1:])
 
@@ -234,20 +230,25 @@ class ModelVae(LightningModule):
                             loc=torch.zeros((size_batch, self.d_state), device=self.device),
                             scale=torch.ones((size_batch, self.d_state), device=self.device)
                             )
-   
+        # reshape data for processing
         data = imgs.view([size_batch] + self.encoder.shape_input)
 
+        # compuete posterior vis amortisation
         q_zx      = torch.distributions.normal.Normal(*self.encoder(data))
+        # MC sample from posterior via reparameterisation 
         z_samples = q_zx.rsample((self.hparams.n_samples,))
+        # approximate the expepected log likelihood
         p_xz      = torch.distributions.normal.Normal(*self.decoder(z_samples))
         lik_eval  = p_xz.log_prob(data)
 
         logp       = torch.sum(
                         torch.mean(
                             torch.mean(lik_eval, dim=0, keepdim=True), dim=1, keepdim=True))
+        # computie KL
         divergence = torch.sum(
                         torch.mean(torch.distributions.kl_divergence(q_zx, self.prior_batch),dim=0))
         
+        # computenegative ELBO
         loss = -logp + divergence
 
         return  loss, logp, divergence

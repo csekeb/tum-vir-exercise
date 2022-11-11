@@ -14,19 +14,25 @@ def main():
     dm = DataModuleFromNPZ(
         data_dir="data_logistic_regression_2d",
         feature_labels=["inputs", "targets"],
-        batch_size=64,
+        batch_size=-1,
         num_workers=4,
         shuffle_training=False
     )
+    if False:
+        import pdb
+        pdb.set_trace()
+
+    dm.prepare_data()
+    dm.setup(stage="fit")
 
     model   = ModelLogisicRegressionMvn(
-                dim=2,
+                2,
+                dm.size_train(),
                 scale_prior=10.0,
-                type_loss="stochastic_local",
                 optimizer_name="RMSprop", 
                 optimizer_lr=0.1)
     
-    trainer = Trainer(max_epochs=10)
+    trainer = Trainer(max_epochs=50)
     
     trainer.fit(model, dm)
     trainer.test(model, dm)

@@ -66,7 +66,7 @@ class ModelLogisicRegressionMvn(LightningModule):
     def __init__(
         self,
         dim,
-        type_loss = "quadrature", # other options "stochastic", "stochastic_local"
+        size_data,
         scale_prior = 1.0,
         n_nodes_quadrature= 9,
         n_samples_mc =8,
@@ -79,16 +79,18 @@ class ModelLogisicRegressionMvn(LightningModule):
         # hyperparameters
         hparams = {}
         hparams.update({"dim": dim,
-                        "type_loss": type_loss,
+                        "size_data": size_data,
                         "n_nodes_quadrature": n_nodes_quadrature,
-                        "n_nodes_quadrature": n_samples_mc,
+                        "n_samples_mc": n_samples_mc,
                         "scale_prior": scale_prior,
                         "optimizer_name": optimizer_name,
                         "optimizer_lr": optimizer_lr})
         self.save_hyperparameters(hparams)
-        
-        self.dim          = dim 
-        self.type_loss    = type_loss.lower()
+        if True:
+            print(self.hparams)
+
+        self.dim          = dim
+        self.size_data    = size_data
         self.n_nodes_gh   = n_nodes_quadrature
         self.n_samples_mc = n_samples_mc
         self.loc_prior    = torch.tensor(0.0, dtype=torch.float32)
@@ -177,19 +179,22 @@ class ModelLogisicRegressionMvn(LightningModule):
         return torch.mean(torch.isclose(labels, labels_pred).float())
 
     def loss(self, features, labels):
-        # computing expected negative likelihood
+        # computing expected negative log likelihood
+        # reparameterisation of stochastic variables
         L       = self.weights_chol() 
-        p_post    = MultivariateNormal(loc=self.weights_loc.squeeze(), scale_tril=L)
+        p_post  = MultivariateNormal(loc=self.weights_loc.squeeze(), scale_tril=L)
 
-        # local sampling
+        # local reparameterisation and MCsampling
         z_loc     = torch.matmul(features, self.weights_loc).squeeze()
         z_scale   = torch.sqrt(torch.sum(torch.matmul(features, L)**2, dim=-1, keepdim=True)).squeeze()
         z_samples = Normal(loc=z_loc, scale=z_scale).rsample([self.n_samples_mc]).transpose(0,1)
 
-        p_labels  = Bernoulli(logits=z_samples)
-        logp_expct = torch.sum(torch.mean(p_labels.log_prob(labels.repeat((1, self.n_samples_mc))), dim=-1))
+        # data distribution via MC samples
+        p_labels   = Bernoulli(logits=z_samples)
+        # computing the MC samples based expected log likelihood with batch learning correction
+        logp_expct = self.size_data*torch.mean(p_labels.log_prob(labels.repeat((1, self.n_samples_mc))))
 
-        # compute KL
+        # computing KL
         p_prior = MultivariateNormal(loc=torch.zeros_like(self.weights_scale_logdiag),
                                     scale_tril=self.scale_prior*torch.diag(torch.ones_like(self.weights_scale_logdiag)))
         kl_div  = kl_divergence(p_post, p_prior) 
