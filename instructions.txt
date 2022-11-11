@@ -2,6 +2,15 @@ Install:
 - clone repository: git clone git@gitlab.com:csekeb/tsm.git
 - create a virtual environment, e.g.: python -m venv [your-fav-name] 
 - activate env and install required packages: pip install -r requirements.txt
+Run instructions:
+- logistig_regression
+    - cd to folder and run "python dataset_logistic_generate.py" to generate data
+    - run "python run.py" to train and test a model
+    - plot results in "logostic_regression.ipynb"  
+- vae
+    - cd to folder and run "python run.py --config config_vae.yaml", this will
+      download MNIST data and train a model
+    - run "tensorboard lightning_logs" to metrics while training the model
 Todo:
 - read docs on dir "text" for instructions and home work questions
 

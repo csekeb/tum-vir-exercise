@@ -158,7 +158,71 @@ class ModelVae(LightningModule):
         return self.generator(z)
 
     def training_step(self, batch, batch_idx):
+        imgs, _ = batch 
+        loss, logp, divergence = self.loss(imgs)
+
+        # scheduling
+        d = self.trainer.max_epochs // 4
+        if self.current_epoch < d:
+            beta = torch.tensor(0.0, device=self.device)
+        elif  self.current_epoch > 2*d:
+            beta = torch.tensor(1.0, device=self.device)
+        else:
+            beta = torch.tensor(
+                    (self.current_epoch -d)/d,
+                    device=self.device
+                    )
+        loss = -logp + beta * divergence
+
+        # logging
+        self.log_dict({'loss': loss, "logp": logp, "div": divergence, "beta": beta, "std": torch.nn.functional.softplus(self.decoder.scale_isp)},
+                  on_step=False, on_epoch=True, prog_bar=False, logger=True)
+        
+        tqdm_dict = {'loss': loss.detach()}
+        output = OrderedDict({'loss': loss, 'progress_bar': tqdm_dict, 'log': tqdm_dict})
+
+        return output
+
+
+    def validation_step(self, batch, batch_idx):
         imgs, _ = batch
+        loss, logp, divergence = self.loss(imgs)
+   
+        self.log_dict({'loss_val': loss, "logp_val": logp, "div_val": divergence},
+                  on_step=False, on_epoch=True, prog_bar=False, logger=True)
+        
+        tqdm_dict = {'loss_val': loss.detach()}
+        output = OrderedDict({'loss_val': loss, 'progress_bar': tqdm_dict, 'log': tqdm_dict})
+
+        return output
+    
+    def test_step(self, batch, batch_idx):
+        imgs, _ = batch
+        loss, logp, divergence = self.loss(imgs)
+   
+        self.log_dict({'loss_test': loss, "logp_test": logp, "div_test": divergence},
+                  on_step=False, on_epoch=True, prog_bar=False, logger=True)
+        
+        tqdm_dict = {'loss_test': loss.detach()}
+        output = OrderedDict({'loss_test': loss, 'progress_bar': tqdm_dict, 'log': tqdm_dict})
+
+        return output
+
+
+    def on_validation_epoch_end(self):
+        z_val = self.z_val.type_as(self.decoder.loc[0].weight)
+        # log sampled images
+        p_xz  = torch.distributions.normal.Normal(*self.decoder(z_val))
+        
+        if False:
+            sample_imgs = p_xz.sample().view([z_val.size(0)]+self.shape_data)
+        else:
+             sample_imgs =0.5* p_xz.loc.view([z_val.size(0)]+self.shape_data) + 0.5
+
+        grid = torchvision.utils.make_grid(1-sample_imgs, nrow=4)
+        self.logger.experiment.add_image('generated_images', grid, self.current_epoch)
+
+    def loss(self, imgs):
         size_batch = imgs.size(0)
 
         if self.shape_data == None:
@@ -178,91 +242,14 @@ class ModelVae(LightningModule):
         p_xz      = torch.distributions.normal.Normal(*self.decoder(z_samples))
         lik_eval  = p_xz.log_prob(data)
 
-       
-        if False:
-            with torch.no_grad():
-                ll = []
-                for i in range(z_samples.size(0)):
-                    p  = torch.distributions.normal.Normal(*self.decoder(z_samples[i]))
-                    ll.append(p.log_prob(data))
-                ll = torch.stack(ll, dim=0)
-                delta = torch.max(torch.abs(ll-lik_eval))
-            breakpoint()
-
         logp       = torch.sum(
                         torch.mean(
                             torch.mean(lik_eval, dim=0, keepdim=True), dim=1, keepdim=True))
         divergence = torch.sum(
                         torch.mean(torch.distributions.kl_divergence(q_zx, self.prior_batch),dim=0))
-
-        d = self.trainer.max_epochs // 4
-        if self.current_epoch < d:
-            beta = torch.tensor(0.0, device=self.device)
-        elif  self.current_epoch > 2*d:
-            beta = torch.tensor(1.0, device=self.device)
-        else:
-            beta = torch.tensor(
-                    (self.current_epoch -d)/d,
-                    device=self.device
-                    )
-
-        loss = -logp + beta * divergence
-
-        self.log_dict({'loss': loss, "logp": logp, "div": divergence, "beta": beta, "std": torch.nn.functional.softplus(self.decoder.scale_isp)},
-                  on_step=False, on_epoch=True, prog_bar=False, logger=True)
         
-        tqdm_dict = {'loss': loss.detach()}
-        output = OrderedDict({'loss': loss, 'progress_bar': tqdm_dict, 'log': tqdm_dict})
-
-        return output
-
-
-    def validation_step(self, batch, batch_idx):
-        imgs, _ = batch
-        size_batch = imgs.size(0)
-        if self.shape_data == None:
-            self.shape_data = list(imgs.shape[1:])
-
-        if self.size_batch_last != size_batch:
-            self.size_batch_last = size_batch
-            self.prior_batch = torch.distributions.Normal(
-                            loc=torch.zeros((size_batch, self.d_state)).to(self.device),
-                            scale=torch.ones((size_batch, self.d_state)).to(self.device)
-                            )
-
-        q_zx      = torch.distributions.normal.Normal(*self.encoder(imgs.view([size_batch] + self.encoder.shape_input)))
-        z_samples = q_zx.rsample((self.hparams.n_samples,))
-        p_xz      = torch.distributions.normal.Normal(*self.decoder(z_samples.view([self.hparams.n_samples, size_batch] + self.decoder.shape_input)))
-        lik_eval  = p_xz.log_prob(imgs.view([size_batch] + self.encoder.shape_input))
-
-
-        logp       = torch.sum(
-                        torch.mean(
-                            torch.mean(lik_eval, dim=0, keepdim=True), dim=1, keepdim=True))
-        divergence = torch.sum(
-                        torch.mean(torch.distributions.kl_divergence(q_zx, self.prior_batch),dim=0))
-
         loss = -logp + divergence
 
-   
-        self.log_dict({'loss_val': loss, "logp_val": logp, "div_val": divergence},
-                  on_step=False, on_epoch=True, prog_bar=False, logger=True)
-        
-        tqdm_dict = {'loss_val': loss.detach()}
-        output = OrderedDict({'loss_val': loss, 'progress_bar': tqdm_dict, 'log': tqdm_dict})
+        return  loss, logp, divergence
 
-        return output
-
-    def on_validation_epoch_end(self):
-        z_val = self.z_val.type_as(self.decoder.loc[0].weight)
-        # log sampled images
-        p_xz  = torch.distributions.normal.Normal(*self.decoder(z_val))
-        
-        if False:
-            sample_imgs = p_xz.sample().view([z_val.size(0)]+self.shape_data)
-        else:
-             sample_imgs =0.5* p_xz.loc.view([z_val.size(0)]+self.shape_data) + 0.5
-
-        grid = torchvision.utils.make_grid(1-sample_imgs, nrow=4)
-        self.logger.experiment.add_image('generated_images', grid, self.current_epoch)
 
