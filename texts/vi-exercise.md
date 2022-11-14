@@ -74,6 +74,34 @@ The approximation of the EBLO objective in implemented in `model_logred_mvn.py` 
 loss(self, features, labels):
 ```
 
+#### Batch learning
+
+For large datasets we cannot use all data in training therefore we use the approximation
+$$
+\begin{align}
+	\sum_{i=1}^{n}\mathbb{E}_{q_{\phi}(w)}[\log p(y_i \vert x_i, w)]  \approx n \frac{1}{\vert S\vert} \sum_{s \in S}\mathbb{E}_{q_{\phi}(w)}[\log p(y_i \vert x_s, w)]
+\end{align}
+$$
+that is, we approximate the objective by using only a random subset $S \subset \{1, \ldots, N\}$ to represent the dataset. This makes the objective stochastic w.r.t. sampling $S$ but with the right optimisation procedure convergence can still be achieved. 
+
+**Implementation** This is implemented via the `DataModuleFromNPZ` in `run.py` which uses data batches of size `size_batch`
+
+```
+    dm = DataModuleFromNPZ(
+        data_dir="data_logistic_regression_2d",
+        feature_labels=["inputs", "targets"],
+        batch_size=64,
+        num_workers=4,
+        shuffle_training=False
+    )
+```
+
+and the code line 
+
+```
+logp_expct = self.size_data*torch.mean(p_labels.log_prob(labels.repeat((1,self.n_samples_mc))))
+```
+
 #### Stochastic gradient learning
 
 The expectations $\mathbb{E}_{q_{\phi}(w)}[\log p(y_i \vert x_s, w)]$ can rarely be computed exactly or approximated accurately via quadrature methods. For this reason we often use Monte-Carlo estimates
@@ -163,36 +191,6 @@ thus significantly reducing the variance of the stochastic approximation of the 
         # computing the MC samples based expected log likelihood with batch learning correction
         logp_expct = self.size_data*torch.mean(p_labels.log_prob(labels.repeat((1, self.n_samples_mc))))
 ```
-
-#### Batch learning
-
-For large datasets we cannot use all data in training therefore we use the approximation
-$$
-\begin{align}
-	\sum_{i=1}^{n}\mathbb{E}_{q_{\phi}(w)}[\log p(y_i \vert x_i, w)]  \approx n \frac{1}{\vert S\vert} \sum_{s \in S}\mathbb{E}_{q_{\phi}(w)}[\log p(y_i \vert x_s, w)]
-\end{align}
-$$
-that is, we approximate the objective by using only a random subset $S \subset \{1, \ldots, N\}$ to represent the dataset. This makes the objective stochastic w.r.t. sampling $S$ but with the right optimisation procedure convergence can still be achieved. 
-
-**Implementation** This is implemented via the `DataModuleFromNPZ` in `run.py` which uses data batches of size `size_batch`
-
-```
-    dm = DataModuleFromNPZ(
-        data_dir="data_logistic_regression_2d",
-        feature_labels=["inputs", "targets"],
-        batch_size=64,
-        num_workers=4,
-        shuffle_training=False
-    )
-```
-
-and the code line 
-
-```
-logp_expct = self.size_data*torch.mean(p_labels.log_prob(labels.repeat((1, self.n_samples_mc))))
-```
-
-#### 
 
 ### Questions and tasks
 

@@ -12,5 +12,5 @@ Run instructions:
       download MNIST data and train a model
     - run "tensorboard lightning_logs" to metrics while training the model
 Todo:
-- read docs on dir "text" for instructions and home work questions
+- read "texts/vi-exercise.md" for instructions and homework question and tasks
 
