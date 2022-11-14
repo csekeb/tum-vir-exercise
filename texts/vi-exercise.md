@@ -1,8 +1,18 @@
 # Homework on Variational Inference
 
-### Variational inference for classification / logistic regression models
+This document provides detailed explanations for the models implemented in
 
-The logistic regression model is a Bayesian classification model 
+- `logistic-regression/model_logreg_mvn.py` a Bayesian logistic regression / classification model for linearly separable data
+- `vae/model_vae.py`  an unsupervised model for handwritten digit generation
+
+The implementations use the `pytorch-lightning` framework and the relevant parts of code are
+
+- `logistic-regression/model_logreg_mvn.py`, functions `forward`, `accuracy` and `loss`as well as `logistic-regression/run.py`
+- `vae/model_vae.py`  functions `forward` and `loss` as well as `vae/run.py` and`vae/config_vae.yaml`  
+
+### Bayesian logistic regression / classification
+
+The Bayesian logistic regression model is a classification model defined as
 $$
 \begin{align}
 	p(Y, w \vert X) &= p(w) \: \prod_{i=1}^{n} p(y_i \vert x_i, w)
@@ -37,7 +47,7 @@ Bayesian inference in this model means
 
 ### Variational inference
 
-Since the true posterior $p(w \vert Y, X)$ cannot be computed we approximate it either by a full $q_{\phi}(w)  =\mathcal{N}(w; \mu, \Sigma)$ with  $\phi=\{\mu, \Sigma\}$ or diagonal $q_{\phi}(w)  =\mathcal{N}(w; \mu, \mathrm{diag}(\sigma^2))$  $\phi=\{\mu, \sigma^2\}$ multivariate Gaussian distribution by optimising the negative evidence lower bound
+Since the Bayesian posterior $p(w \vert Y, X)$ is analytically intractable we approximate it either by a multivariate Normal $q_{\phi}(w)  =\mathcal{N}(w; \mu, \Sigma)$ with  $\phi=\{\mu, \Sigma\}$ or diagonal/factorised multivariate Normal $q_{\phi}(w)  =\mathcal{N}(w; \mu, \mathrm{diag}(\sigma^2))$  $\phi=\{\mu, \sigma^2\}$ by optimising the negative evidence lower bound (ELBO)
 $$
 \begin{align}
 	L(\phi; Y,X) &= -\sum_{i=1}^{n}\mathbb{E}_{q_{\phi}(w)}[\log p(y_i \vert x_i, w)] + \mathrm{KL}[q_{\phi}(w) \vert\!\vert p(w)].
@@ -45,7 +55,7 @@ $$
 	& \geq \log p(Y\vert X) 
 \end{align}
 $$
-Here we need to approximate $\mathbb{E}_{q_{\phi}(w)}[\log p(y_i \vert x_i w)]$ and  the predictive distribution using some numerical tricks. Some useful ones are 
+Here we need to numerically approximate $\mathbb{E}_{q_{\phi}(w)}[\log p(y_i \vert x_i w)]$ and  the predictive distribution We can use 
 $$
 \begin{align}
 	\int \!dw\: f(x^{T}w)\: \mathcal{N}(u;\mu, \Sigma) &=
@@ -68,32 +78,34 @@ where $\{\tilde{u}_k, w_k\}_{k=1}^{K}$ are the weights and nodes of the univaria
 
 ### Key variational inference concepts to learn from this model
 
-The approximation of the EBLO objective in implemented in `model_logred_mvn.py`  in the function.
+The approximation of the EBLO objective in implemented in in the function.
 
 ```
 def loss(self, features, labels):
 ```
 
+please follow the implementation there.
+
 #### Batch learning
 
-For large datasets we cannot use all data in training therefore we use the approximation
+For large datasets we cannot use all data in each training step due to memory restrictions, therefore, we use the approximation
 $$
 \begin{align}
-	\sum_{i=1}^{n}\mathbb{E}_{q_{\phi}(w)}[\log p(y_i \vert x_i, w)]  \approx n \frac{1}{\vert S\vert} \sum_{s \in S}\mathbb{E}_{q_{\phi}(w)}[\log p(y_i \vert x_s, w)]
+	\sum_{i=1}^{n}\mathbb{E}_{q_{\phi}(w)}[\log p(y_i \vert x_i, w)]  \approx n \frac{1}{\vert S\vert} \sum_{s \in S}\mathbb{E}_{q_{\phi}(w)}[\log p(y_i \vert x_s, w)],
 \end{align}
 $$
-that is, we approximate the objective by using only a random subset $S \subset \{1, \ldots, N\}$ to represent the dataset. This makes the objective stochastic w.r.t. sampling $S$ but with the right optimisation procedure convergence can still be achieved. 
+that is, we approximate the objective by using only a random subset $S \subseteq \{1, \ldots, N\}$ to represent the dataset. This makes the objective stochastic w.r.t. sampling $S$ but with the right optimisation procedure (stochastic gradient descent with decaying learning rates) convergence can still be achieved. 
 
-**Implementation** This is implemented via the `DataModuleFromNPZ` in `run.py` which uses data batches of size `size_batch`
+**Implementation** This concept is implemented via the `DataModuleFromNPZ` in `run.py` which uses data batches of size `size_batch`, see 
 
 ```
-    dm = DataModuleFromNPZ(
-        data_dir="data_logistic_regression_2d",
-        feature_labels=["inputs", "targets"],
-        batch_size=64,
-        num_workers=4,
-        shuffle_training=False
-    )
+dm = DataModuleFromNPZ(
+    data_dir="data_logistic_regression_2d",
+    feature_labels=["inputs", "targets"],
+    batch_size=64,
+    num_workers=4,
+    shuffle_training=False
+)
 ```
 
 and the code line 
@@ -102,15 +114,17 @@ and the code line
 logp_expct = self.size_data*torch.mean(p_labels.log_prob(labels.repeat((1,self.n_samples_mc))))
 ```
 
+where we take the batch average of the expected log likelihood and rescale it with the size of the training data set.
+
 #### Stochastic gradient learning
 
-The expectations $\mathbb{E}_{q_{\phi}(w)}[\log p(y_i \vert x_s, w)]$ can rarely be computed exactly or approximated accurately via quadrature methods. For this reason we often use Monte-Carlo estimates
+The expectations $\mathbb{E}_{q_{\phi}(w)}[\log p(y_i \vert x_s, w)]$ can rarely be computed exactly or approximated accurately via quadrature methods---quadrature work well only in 1D.  For this reason we often use Monte-Carlo estimates
 $$
 \begin{align}
-	\mathbb{E}_{q_{\phi}(w)}[\log p(y_i \vert x_s, w)] \approx \frac{1}{ R } \sum_{w_r \sim q(w)} \log p(y_i \vert x_s, w_r),
+	\mathbb{E}_{q_{\phi}(w)}[\log p(y_i \vert x_s, w)] \approx \frac{1}{ R } \sum_{w^{(r)} \sim q(w)} \log p(y_i \vert x_s, w^{(r)}),
 \end{align}
 $$
-that is, we sample $R$ samples $w_r \sim q(w)$ and average. This again makes the objective stochastic but we hope that with the right number of samples and the right optimisation procedure the optimisation can stil converge. 
+that is, we sample $R$ samples $w^{(r)} \sim q(w)$ and average. This again makes the objective stochastic but we hope that with the right number of samples and the right optimisation procedure the optimisation can stlil converge (see above). 
 
 **Implementation** This is implemented in line
 
@@ -118,25 +132,27 @@ that is, we sample $R$ samples $w_r \sim q(w)$ and average. This again makes the
 logp_expct = self.size_data*torch.mean(p_labels.log_prob(labels.repeat((1, self.n_samples_mc))))
 ```
 
+In our implementation we so something a cleverer detailed in the next two sections.
+
 #### Reparameterisation of stochastic variables
 
-If a random variable can be represented as a deterministic differentiable function of some other/basic random variable with fixed or no parameters, say,
+If a random variable can be represented as a deterministic (preferably differentiable) function of some other/basic random variable with fixed or no parameters, say,
 $$
 \begin{align}
 	z = f_{\theta}(\epsilon), \quad \epsilon\sim p_0(\epsilon), \qquad p_{\theta}(z) = \int\! d\epsilon \: p_{0}(\epsilon)\:\delta(z-f_{\theta}(\epsilon))
 \end{align}
 $$
-then we can  rewrite expectations w.r.t this base distribution and make the source of stochasticity in $p_{\theta}$ independent of the parameters
+then we can rewrite expectations w.r.t this base distribution and make the source of stochasticity in $p_{\theta}$ independent of the parameters
 $$
 \begin{align}
-	E_{p(z)}[g(z)] = E_{p_{0}(\epsilon)}[g(f_{\theta}(\epsilon))] \approx \frac{1}{R}\sum_{\epsilon_r \sim p_{0}(\epsilon)}g(f_{\theta}(\epsilon_r)).
+	E_{p(z)}[g(z)] = E_{p_{0}(\epsilon)}[g(f_{\theta}(\epsilon))] \approx \frac{1}{R}\sum_{\epsilon^{(r)} \sim p_{0}(\epsilon)}g(f_{\theta}(\epsilon^{(r)}).
 \end{align}
 $$
-This makes the expectation easily differentiable w.r.t. $\theta$, that is 
+This makes the MC estimates of expectations easily computable and differentiable w.r.t. $\theta$, that is 
 $$
 	\partial_{\theta}E_{p(z)}[g(z)] = E_{p_{0}(\epsilon)}[\partial g(f_{\theta}(\epsilon)) \partial_{\theta}f_{\theta}(\epsilon)] \approx \frac{1}{R}\sum_{\epsilon_r \sim p_{0}(\epsilon)}\partial g(f_{\theta}(\epsilon)) \partial_{\theta}f_{\theta}(\epsilon).
 $$
-In case of the multivariate normal, we have $w =  \mu +  L \epsilon, LL^{T}=\Sigma, \epsilon \sim \mathcal{N}(0, I)$. Hence we can use Monte-Carlo samples from $\epsilon$ to approximate the objective and easily differentiate the approximation. 
+In our model we have $w =  \mu +  L \epsilon, LL^{T}=\Sigma, \epsilon \sim \mathcal{N}(0, I)$. Hence we can use Monte-Carlo samples from $\epsilon$ to approximate the objective and easily differentiate the approximation. 
 
 **Implementation** This is implemented in lines
 
@@ -153,7 +169,7 @@ def weights_chol(self):
     return torch.tril(self.weights_scale_lower, -1) + torch.diag(torch.exp(self.weights_scale_logdiag))
 ```
 
-and the parameterisation is defined the `__init__` function in
+and the parameterisation is defined the `__init__` function in lines
 
 ```
 self.weights_loc           = nn.Parameter(torch.zeros((self.dim,1)), requires_grad=True) 
@@ -163,15 +179,15 @@ self.weights_scale_lower   = nn.Parameter(torch.zeros((self.dim, self.dim)), req
 
 #### Local reparameterisation
 
-We observe that the the likelihood terms $\mathrm{Bernoulli}(y_i; x_i w )$ depend only on $x_i w$ hence instead to sampling from $w \sim q(w) = \mathcal{N}(\mu, \Sigma)$ we can sample from $x_iw \sim w) = \mathcal{N}(x_i\mu, x_i\Sigma x_i^{T})$, that is
+We observe that the the likelihood terms $\mathrm{Bernoulli}(y_i; x_i w )$ depend only on $x_i w$ hence instead to sampling from $w \sim q(w) = \mathcal{N}(\mu, \Sigma)$ we can sample from $z_i=x_iw \sim = \mathcal{N}(x_i\mu, x_i\Sigma x_i^{T})$, that is
 $$
 \begin{align}
 	\mathbb{E}_{q_{\phi}(w)}[\log \mathrm{Bernoulli}(y_i; x_i w )] 
 	&= \mathbb{E}_{w \sim \mathcal{N}(\mu, \Sigma)}[\log \mathrm{Bernoulli}(y_i; x_i w )]
 	\\
-	&=\mathbb{E}_{z \sim \mathcal{N}(x_i\mu, x_i\Sigma x_i^{T})}[\log \mathrm{Bernoulli}(y_i; z)]
+	&=\mathbb{E}_{z_i \sim \mathcal{N}(x_i\mu, x_i\Sigma x_i^{T})}[\log \mathrm{Bernoulli}(y_i; z_i)]
 	\\
-	&\approx\frac{1}{R} \sum_{z_r \sim \mathcal{N}(x_i\mu, x_i\Sigma x_i^{T})}\log \mathrm{Bernoulli}(y_i; z_r)
+	&\approx\frac{1}{R} \sum_{z_i^{(r)} \sim \mathcal{N}(x_i\mu, x_i\Sigma x_i^{T})}\log \mathrm{Bernoulli}(y_i; z_i^{(r)})
 \end{align}
 $$
 thus significantly reducing the variance of the stochastic approximation of the objective.
@@ -207,7 +223,7 @@ For the logistic regression model detailed above
 
 
 
-## Variational auto-encoders for handwritten digit generation 
+## Unsupervised handwritten digit recognition /variational auto-encoder
 
 Variational auto-encoders are unsupervised models that learn to embed and generate new data similar to one in a, i.i.d. dataset $X = [x_1, \ldots, x_n]^{T}$. They are Bayesian models where the distribution of the data is
 $$
@@ -297,6 +313,14 @@ def configure_optimizers(self):
 #### Amortised variational inference
 
 If we would proceed according to the logistic regression model we would have to approximate each $p_{\theta}(z_i\vert x_i)$ in a separate inner loop for each new $\theta$ value. Instead we learn $q_{\phi}(z_i; x_i) \approx p_{\theta}(z_i \vert x_i)$ thus replacing the variational inference algorithm with learning the parameter mappings $\mathrm{NN}^{\mathrm{enc-mean}}_{\phi_{\mu}}(x_i)$ and $\mathrm{NN}^{\mathrm{enc-var}}_{\theta_{\mu}}(x_i)$.  
+
+```
+q_zx = torch.distributions.normal.Normal(*self.encoder(imgs.view([size_batch] + self.encoder.shape_input)))
+z_samples = q_zx.rsample((self.hparams.n_samples,))
+p_xz = torch.distributions.normal.Normal(*self.decoder(z_samples.view([self.hparams.n_samples, size_batch] + self.decoder.shape_input)))
+lik_eval = p_xz.log_prob(imgs.view([size_batch] + self.encoder.shape_input))
+logp = torch.sum(torch.mean(torch.mean(lik_eval, dim=0, keepdim=True), dim=1, keepdim=True))
+```
 
 
 

@@ -11,6 +11,6 @@ Runing instructions:
 - vae
     - cd to folder "vae" and run "python run.py --config config_vae.yaml", this will
       download MNIST data and train a model
-    - run "tensorboard --logdir lightning_logs" to check metrics while training the model
+    - run "tensorboard --logdir runs/logs/example_vae/lightning_logs" to check metrics while training the model
     - read document "texts/vi-exercise.pdf" to understand the code and for further instructions
 
