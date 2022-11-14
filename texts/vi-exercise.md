@@ -1,4 +1,4 @@
-# Exercises on Variational Inference
+# Homework on Variational Inference
 
 ### Variational inference for classification / logistic regression models
 
@@ -56,7 +56,7 @@ $$
   \\
 	\int \!du\: \sigma(u)\: \mathcal{N}(u;\mu, \sigma^2) 
 	&\approx 
-	\sigma(\frac{1}{\sqrt{1+\pi \sigma^2/8}}\mu)
+	\sigma\left(\frac{1}{\sqrt{1+\pi \sigma^2/8}}\mu\right)
 	\\
 	\int \!du\: \sigma(u)\: \mathcal{N}(u;\mu, \sigma^2) 
 	&\approx 
@@ -71,7 +71,7 @@ where $\{\tilde{u}_k, w_k\}_{k=1}^{K}$ are the weights and nodes of the univaria
 The approximation of the EBLO objective in implemented in `model_logred_mvn.py`  in the function.
 
 ```
-loss(self, features, labels):
+def loss(self, features, labels):
 ```
 
 #### Batch learning
@@ -141,9 +141,9 @@ In case of the multivariate normal, we have $w =  \mu +  L \epsilon, LL^{T}=\Sig
 **Implementation** This is implemented in lines
 
 ```
-        # reparameterisation of stochastic variables
-        L      = self.weights_chol() 
-        p_post = MultivariateNormal(loc=self.weights_loc.squeeze(), scale_tril=L)
+# reparameterisation of stochastic variables
+L      = self.weights_chol() 
+p_post = MultivariateNormal(loc=self.weights_loc.squeeze(), scale_tril=L)
 ```
 
 via the helper function
@@ -161,8 +161,6 @@ self.weights_scale_logdiag = nn.Parameter(torch.zeros((self.dim)), requires_grad
 self.weights_scale_lower   = nn.Parameter(torch.zeros((self.dim, self.dim)), requires_grad=True) 
 ```
 
-
-
 #### Local reparameterisation
 
 We observe that the the likelihood terms $\mathrm{Bernoulli}(y_i; x_i w )$ depend only on $x_i w$ hence instead to sampling from $w \sim q(w) = \mathcal{N}(\mu, \Sigma)$ we can sample from $x_iw \sim w) = \mathcal{N}(x_i\mu, x_i\Sigma x_i^{T})$, that is
@@ -173,7 +171,7 @@ $$
 	\\
 	&=\mathbb{E}_{z \sim \mathcal{N}(x_i\mu, x_i\Sigma x_i^{T})}[\log \mathrm{Bernoulli}(y_i; z)]
 	\\
-	&\approx\frac{1}{R} \sum_{z_r \sim \mathcal{N}(x_i\mu, x_i\Sigma x_i^{T})}log \mathrm{Bernoulli}(y_i; z_r)
+	&\approx\frac{1}{R} \sum_{z_r \sim \mathcal{N}(x_i\mu, x_i\Sigma x_i^{T})}\log \mathrm{Bernoulli}(y_i; z_r)
 \end{align}
 $$
 thus significantly reducing the variance of the stochastic approximation of the objective.
@@ -181,22 +179,22 @@ thus significantly reducing the variance of the stochastic approximation of the 
 **Implementation** This is implemented in lines
 
 ```
-        # local reparameterisation and MCsampling
-        z_loc     = torch.matmul(features, self.weights_loc).squeeze()
-        z_scale   = torch.sqrt(torch.sum(torch.matmul(features, L)**2, dim=-1, keepdim=True)).squeeze()
-        z_samples = Normal(loc=z_loc, scale=z_scale).rsample([self.n_samples_mc]).transpose(0,1)
+# local reparameterisation and MCsampling
+z_loc     = torch.matmul(features, self.weights_loc).squeeze()
+z_scale   = torch.sqrt(torch.sum(torch.matmul(features, L)**2, dim=-1, keepdim=True)).squeeze()
+z_samples = Normal(loc=z_loc, scale=z_scale).rsample([self.n_samples_mc]).transpose(0,1)
 
-        # data distribution via MC samples
-        p_labels   = Bernoulli(logits=z_samples)
-        # computing the MC samples based expected log likelihood with batch learning correction
-        logp_expct = self.size_data*torch.mean(p_labels.log_prob(labels.repeat((1, self.n_samples_mc))))
+# data distribution via MC samples
+p_labels   = Bernoulli(logits=z_samples)
+# computing the MC samples based expected log likelihood with batch learning correction
+logp_expct = self.size_data*torch.mean(p_labels.log_prob(labels.repeat((1, self.n_samples_mc))))
 ```
 
-### Questions and tasks
+### Questions and tasks (at home)
 
 For the logistic regression model detailed above
 
-- run the code with `python run.py`and check metrics with `tensorboard lightning_logs`
+- run the code with `python run.py`and check metrics with `tensorboard --logdir lightning_logs` 
 - change `batch_size`, `n_samples_mc`, `max_epochs`, what do you notice?
 - try to implement the diagonal version of `class ModelLogisicRegressionMvn(LightningModule)`, what changes do you have to make?
 
@@ -279,41 +277,7 @@ class Encoder(nn.Module):
 The loss function is implemented in 
 
 ```
-    def loss(self, imgs):
-        size_batch = imgs.size(0)
-
-        # define proior
-        if self.shape_data == None:
-            self.shape_data = list(imgs.shape[1:])
-
-        if self.size_batch_last != size_batch:
-            self.size_batch_last = size_batch
-            self.prior_batch = torch.distributions.normal.Normal(
-                            loc=torch.zeros((size_batch, self.d_state), device=self.device),
-                            scale=torch.ones((size_batch, self.d_state), device=self.device)
-                            )
-        # reshape data for processing
-        data = imgs.view([size_batch] + self.encoder.shape_input)
-
-        # compuete posterior vis amortisation
-        q_zx      = torch.distributions.normal.Normal(*self.encoder(data))
-        # MC sample from posterior via reparameterisation 
-        z_samples = q_zx.rsample((self.hparams.n_samples,))
-        # approximate the expepected log likelihood
-        p_xz      = torch.distributions.normal.Normal(*self.decoder(z_samples))
-        lik_eval  = p_xz.log_prob(data)
-
-        logp       = torch.sum(
-                        torch.mean(
-                            torch.mean(lik_eval, dim=0, keepdim=True), dim=1, keepdim=True))
-        # computie KL
-        divergence = torch.sum(
-                        torch.mean(torch.distributions.kl_divergence(q_zx, self.prior_batch),dim=0))
-        
-        # computenegative ELBO
-        loss = -logp + divergence
-
-        return  loss, logp, divergence
+def loss(self, imgs):
 ```
 
 #### Maximum likelihood via expectation maximisation
@@ -323,11 +287,11 @@ In this model we not only have to approximate $p_{\theta}(z_i \vert x_i)$ but we
 **Implementation**  joint learning is implemented via a single optimiser
 
 ```
-    def configure_optimizers(self):
-        opt = torch.optim.Adam(itertools.chain(self.encoder.parameters(),
-                                               self.decoder.parameters()),
+def configure_optimizers(self):
+    opt = torch.optim.Adam(itertools.chain(self.encoder.parameters(),
+                                           self.decoder.parameters()),
                                lr=self.hparams.lr, betas=(self.hparams.b1, self.hparams.b2))
-        return opt
+    return opt
 ```
 
 #### Amortised variational inference
@@ -338,14 +302,14 @@ If we would proceed according to the logistic regression model we would have to 
 
 ### Optional questions and tasks
 
-- run the code with `python run.py --config config_vae.yaml`and check metrics with `tensorboard lightning_logs`
+- run the code with `python run.py --config config_vae.yaml`and check metrics with `tensorboard  --logdir lightning_logs`
 
 - if you have time, read the original paper https://arxiv.org/pdf/1312.6114.pdf 
 
 - try to answer the questions
-  - how is this model different from the logistic-regression one
+  - how is this model different from the logistic regression one
     - in terms of latent variables?
-    - in terms of likelihood model?s
+    - in terms of likelihood model?
     
   - what are the differences in term of approximate inference
     - in term of latent variables?

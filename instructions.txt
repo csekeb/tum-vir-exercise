@@ -1,16 +1,16 @@
 Install:
-- clone repository: git clone git@gitlab.com:csekeb/tsm.git
+- clone repository: git clone https://github.com/csekeb/tum-vir-exercise.git
 - create a virtual environment, e.g.: python -m venv [your-fav-name] 
-- activate env and install required packages: pip install -r requirements.txt
-Run instructions:
-- logistig_regression
-    - cd to folder and run "python dataset_logistic_generate.py" to generate data
+- activate env and install required packages: "pip install -r requirements.txt"
+Runing instructions:
+- logistic-regression
+    - cd to folder "logistic-regression"  and run "python dataset_logistic_generate.py" to generate data
     - run "python run.py" to train and test a model
-    - plot results in "logostic_regression.ipynb"  
+    - plot results in "plot_logreg_results.ipynb"
+    - read document "texts/vi-exercise.pdf" to understand the code and for further instructions
 - vae
-    - cd to folder and run "python run.py --config config_vae.yaml", this will
+    - cd to folder "vae" and run "python run.py --config config_vae.yaml", this will
       download MNIST data and train a model
-    - run "tensorboard lightning_logs" to metrics while training the model
-Todo:
-- read "texts/vi-exercise.md" for instructions and homework question and tasks
+    - run "tensorboard --logdir lightning_logs" to check metrics while training the model
+    - read document "texts/vi-exercise.pdf" to understand the code and for further instructions
 
