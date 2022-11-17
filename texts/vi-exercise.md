@@ -17,7 +17,7 @@ $$
 \begin{align}
 	p(Y, w \vert X) &= p(w) \: \prod_{i=1}^{n} p(y_i \vert x_i, w)
   \\
-  & =\mathcal{N}(w; 0, \sigma_{\mathrm{prior}}\: I_d) \: \prod_{i=1}^{n}\mathrm{Bernoulli}(y_i; x_i w )
+  & =\mathcal{N}(w; 0, \sigma_{\mathrm{prior}}\: I_d) \: \prod_{i=1}^{n}\mathrm{Bernoulli}(y_i; x_i^{T} w )
 \end{align}
 $$
 where
@@ -25,7 +25,7 @@ where
 - $x_i \in \mathbb{R}^{d}$ are features $X = [x_1,x_2, \ldots, x_n]^{T}$
 - $y_i \in \{0,1\}$ are binary class labels $Y = [y_1,y_2, \ldots, y_n]^{T}$
 - $\mathcal{N}(w; 0, \sigma_{\mathrm{prior}}\: I_d)$ denotes a multivariate normal distribution on a weight vector $w \in \mathbb{R}^{d}$
-- $\mathrm{Bernoulli}(y_i; x_i w ) = \sigma(x_i w)^y_i (1-\sigma(x_i w))^{1-y_i}$ with $\sigma(x_i w) = 1/(1+e^{-x_i w})$.
+- $\mathrm{Bernoulli}(y_i; x_i w ) = \mathrm{sigmoid}(x_i w)^y_i (1-\mathrm{sigmoid}(x_i w))^{1-y_i}$ with $\mathrm{sigmoid}(x_i w) = 1/(1+e^{-x_i w})$.
 
 Bayesian inference in this model means
 
@@ -59,23 +59,26 @@ $$
 Here we need to numerically approximate $\mathbb{E}_{q_{\phi}(w)}[\log p(y_i \vert x_i w)]$ and  the predictive distribution. We can use 
 $$
 \begin{align}
-	\int \!dw\: f(xw)\: \mathcal{N}(w;\mu, \Sigma) &=
-  \int \!du\: f(u)\: \mathcal{N}(u;xw, x\Sigma x^{T})
+	\int \!dw\: f(x^{T}w)\: \mathcal{N}(w;\mu, \Sigma) &=
+  \int \!dz\: f(z)\: \mathcal{N}(z;x^{T}w, x^{T}\Sigma x)
+  %\\
+  %&=
+  %\int \!d\epsilon\: f(x^{T} w + \sqrt{x^{T}\Sigma x}\epsilon)\: \mathcal{N}(\epsilon;0,1)
+  %\\
+  %&\approx
+  %\sum_{\epsilon^{(r)} \sim \mathcal{N}(0,1)}\: f(x^{T} w + \sqrt{x^{T}\Sigma x}\epsilon^{(r)})\: 
   \\
-  &=
-  \int \!d\epsilon\: f(x w + \sqrt{x\Sigma x^{T}}\epsilon)\: \mathcal{N}(\epsilon;0,1)
-  \\
-	\int \!du\: \sigma(u)\: \mathcal{N}(u;\mu, \sigma^2) 
+	\int \!dz\: \mathrm{sigmoid}(z)\: \mathcal{N}(z;\mu, \sigma^2) 
 	&\approx 
-	\sigma\left(\frac{1}{\sqrt{1+\pi \sigma^2/8}}\mu\right)
+	\mathrm{sigmoid}\left(\frac{1}{\sqrt{1+\pi \sigma^2/8}}\mu\right)
 	\\
-	\int \!du\: \sigma(u)\: \mathcal{N}(u;\mu, \sigma^2) 
+	\int \!dz\: f(z)\: \mathcal{N}(z;\mu, \sigma^2) 
 	&\approx 
-	\sum_{k=1}^{K}\sigma(\mu+ \sqrt{2}\sigma \tilde{u}_i) \: \frac{1}{\sqrt{\pi}} w_i,
+	\sum_{k=1}^{K}f(\mu+ \sqrt{2}\sigma \tilde{z}_i) \: \frac{1}{\sqrt{\pi}} w_i,
 \end{align}
 $$
 
-where $\{\tilde{u}_k, w_k\}_{k=1}^{K}$ are the weights and nodes of the univariate Gauss-Hermite quadrature.
+where $\{\tilde{z}_k, w_k\}_{k=1}^{K}$ are the weights and nodes of the univariate Gauss-Hermite quadrature.
 
 ### Key variational inference concepts in this model / implementation
 
@@ -183,17 +186,17 @@ self.weights_scale_lower   = nn.Parameter(torch.zeros((self.dim, self.dim)), req
 
 #### Local reparameterisation
 
-We observe that the likelihood terms $\mathrm{Bernoulli}(y_i; x_i w )$ depend only on $x_i w$ hence instead to sampling from $w \sim q(w) = \mathcal{N}(\mu, \Sigma)$ we can sample from $z_i=x_iw \sim = \mathcal{N}(x_i\mu, x_i\Sigma x_i^{T})$, that is
+We observe that the likelihood terms $\mathrm{Bernoulli}(y_i; x_i w )$ depend only on $x_i w$ hence instead to sampling from $w \sim q(w) = \mathcal{N}(\mu, \Sigma)$ we can sample from $z_i=x_iw \sim \mathcal{N}(x_i^{T}\mu, x_i^{T}\Sigma x_i)$, that is
 $$
 \begin{align}
 	\mathbb{E}_{q_{\phi}(w)}[\log \mathrm{Bernoulli}(y_i; x_i w )] 
 	&= \mathbb{E}_{w \sim \mathcal{N}(\mu, \Sigma)}[\log \mathrm{Bernoulli}(y_i; x_i w )]
 	\\
-	&=\mathbb{E}_{z_i \sim \mathcal{N}(x_i\mu, x_i\Sigma x_i^{T})}[\log \mathrm{Bernoulli}(y_i; z_i)]
+	&=\mathbb{E}_{z_i \sim \mathcal{N}(x_i^{T}\mu, x_i^{T}\Sigma x_i)}[\log \mathrm{Bernoulli}(y_i; z_i)]
 	\\
 	&\approx\frac{1}{R} \sum_{z_i^{(r)} \sim \mathcal{N}(x_i\mu, x_i\Sigma x_i^{T})}\log \mathrm{Bernoulli}(y_i; z_i^{(r)})
 	\\
-	&=\frac{1}{R} \sum_{\epsilon_i^{(r)} \sim \mathcal{N}(0, 1)}\log \mathrm{Bernoulli}(y_i; x_i\mu + \sqrt{x_i\Sigma x_i^{T})} \epsilon^{(r)})
+	&=\frac{1}{R} \sum_{\epsilon_i^{(r)} \sim \mathcal{N}(0, 1)}\log \mathrm{Bernoulli}(y_i; x_i^{T}\mu + \sqrt{x_i^{T}\Sigma x_i)} \epsilon^{(r)})
 	\\
 \end{align}
 $$
