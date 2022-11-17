@@ -125,10 +125,10 @@ class ModelLogisicRegressionMvn(LightningModule):
         loss, logp, kl_div = self.loss(features, labels)
         acc = self.accuracy(features, labels)
 
-        self.log_dict({'loss': loss.detach(), "logp": logp.detach(), "kl": kl_div.detach(), "acc": acc.detach()},
+        self.log_dict({'loss': loss.detach(), "logp": logp.detach(), "kl": kl_div.detach(), "acc_train": acc.detach()},
                   on_step=False, on_epoch=True, prog_bar=False, logger=True)
         
-        tqdm_dict = {'loss': loss.detach(), "acc": acc.detach()}
+        tqdm_dict = {'loss': loss.detach(), "acc_train": acc.detach()}
         output = OrderedDict({'loss': loss, 'progress_bar': tqdm_dict, 'log': tqdm_dict})
 
         #print(f"accuracy: {acc}")
@@ -140,7 +140,7 @@ class ModelLogisicRegressionMvn(LightningModule):
         loss, logp, kl_div = self.loss(features, labels)
         acc = self.accuracy(features, labels)
 
-        self.log_dict({'loss_val': loss.detach(), "logp_val": logp.detach(), "kl_val": kl_div.detach(), "acc": acc.detach()},
+        self.log_dict({'loss_val': loss.detach(), "logp_val": logp.detach(), "kl_val": kl_div.detach(), "acc_val": acc.detach()},
                   on_step=False, on_epoch=True, prog_bar=False, logger=True)
         
         tqdm_dict = {'loss_val': loss.detach(), "acc_val": acc.detach()}

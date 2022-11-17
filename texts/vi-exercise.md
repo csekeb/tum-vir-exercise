@@ -219,7 +219,7 @@ For the logistic regression model detailed above
 
 - Run the code with `python run.py` and check metrics with `tensorboard --logdir lightning_logs` .
 - Change `batch_size`, `n_samples_mc`, `max_epochs`, `lr` and the optimisation algorithm, what do you notice?
-- Try to implement the diagonal version of `class ModelLogisicRegressionMvn(LightningModule)`, what changes do you have to make? What advantaged does this method have when the number of features $d$ is large?
+- Try to implement the diagonal version of `class ModelLogisicRegressionMvn(LightningModule)`, what changes do you have to make? What advantaged does this method have when the number of features $d$ is large? Hint: you need to compute `z_scale` and in a different way and use `Normal` instead of `MultivariateNormal` to compute the KL divergence.
 
 - Compare for $q_{\phi}(w; Y, X)  =\mathcal{N}(w; \mu, \Sigma)$ and $q_{\phi}(w; Y, X)  =\mathcal{N}(w; \mu, \mathrm{diag}(\sigma^2))$ .
   - What are the differences in terms of storage and computational complexity?
