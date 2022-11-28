@@ -10,7 +10,7 @@ Install:
 Instructions:
 
 - Bayesian Logistic Regression
-    - cd to folder `logistic-regression` and run `python dataset_logistic_generate.py`to generate data
+    - cd to folder `logistic-regression` and run `python dataset_logistic_generate.py` to generate data
     - run `python run.py` to train and test a model
     - plot results in `plot_logreg_results.ipynb`
     - read document `texts/vi-exercise.pdf` to understand the code and for further instructions w.r.t. homework and exercises
