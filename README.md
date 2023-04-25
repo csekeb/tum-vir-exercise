@@ -1,4 +1,4 @@
-## 1938: Variational Inference in Robotics / Variational Inference Exercise 
+## IN2107 Variational Inference in Robotics / Variational Inference Exercise 
 
 Install:
 
