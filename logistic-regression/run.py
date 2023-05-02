@@ -4,7 +4,7 @@ import yaml
 
 import pytorch_lightning as pl
 from pytorch_lightning import Trainer
-from model_logreg_dn import ModelLogisicRegressionMvn
+from model_logreg_mvn import ModelLogisicRegressionMvn
 from dataset_npz import DataModuleFromNPZ
 
 
@@ -31,7 +31,6 @@ def main():
     model_mvn = ModelLogisicRegressionMvn(
                 2,
                 dm.size_train(),
-                is_diagonal=False,
                 scale_prior=10.0,
                 optimizer_name="RMSprop", 
                 optimizer_lr=0.1,

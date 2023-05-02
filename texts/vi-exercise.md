@@ -1,11 +1,11 @@
 # Homework on Variational Inference
 
-This document provides detailed explanations for the models implemented in
+This document provides detailed explanations about the models implemented in
 
-- `logistic-regression/model_logreg_mvn.py` a Bayesian logistic regression / classification model for linearly separable data
+- `logistic-regression/model_logreg_mvn.py` implements a Bayesian logistic regression model (classification) for linearly separable data
 - `vae/model_vae.py`  an unsupervised model for handwritten digit generation.
 
-The implementations use the `pytorch-lightning` framework and the relevant parts of code are
+The implementations uses the `pytorch-lightning` framework and the relevant parts of code are in
 
 - `logistic-regression/model_logreg_mvn.py`, functions `forward`, `accuracy` and `loss`as well as `logistic-regression/run.py`
 - `vae/model_vae.py`,  functions `forward` and `loss` as well as `vae/run.py` and`vae/config_vae.yaml`.  
@@ -48,15 +48,15 @@ Bayesian inference in this model means
 
 ### Variational inference
 
-Since the Bayesian posterior $p(w \vert Y, X)$ is analytically intractable, we approximate it either by a multivariate Normal $q_{\phi}(w)  =\mathcal{N}(w; \mu, \Sigma)$ with  $\phi=\{\mu, \Sigma\}$ or diagonal/factorised multivariate Normal $q_{\phi}(w)  =\mathcal{N}(w; \mu, \mathrm{diag}(\sigma^2))$  $\phi=\{\mu, \sigma^2\}$ by optimising the negative evidence lower bound (ELBO)
+Since the Bayesian posterior $p(w \vert Y, X)$ is analytically intractable, we approximate it either by a multivariate normal $q_{\phi}(w)  =\mathcal{N}(w; \mu, \Sigma)$ with  $\phi=\{\mu, \Sigma\}$ or a diagonal/factorised multivariate normal $q_{\phi}(w)  =\mathcal{N}(w; \mu, \mathrm{diag}(\sigma^2))$  $\phi=\{\mu, \sigma^2\}$ by optimising the negative evidence lower bound (ELBO)
 $$
 \begin{align}
 	L(\phi; Y,X) &= -\sum_{i=1}^{n}\mathbb{E}_{q_{\phi}(w)}[\log p(y_i \vert x_i, w)] + \mathrm{KL}[q_{\phi}(w) \vert\!\vert p(w)].
 	\\
-	& \geq \log p(Y\vert X) 
+	& \geq -\log p(Y\vert X) 
 \end{align}
 $$
-Here we need to numerically approximate $\mathbb{E}_{q_{\phi}(w)}[\log p(y_i \vert x_i w)]$ and  the predictive distribution. We can use 
+Here we need to numerically approximate $\mathbb{E}_{q_{\phi}(w)}[\log p(y_i \vert x_i w)]$ and  the predictive distribution. We can use the following tricks
 $$
 \begin{align}
 	\int \!dw\: f(x^{T}w)\: \mathcal{N}(w;\mu, \Sigma) &=
@@ -78,9 +78,11 @@ $$
 \end{align}
 $$
 
-where $\{\tilde{z}_k, w_k\}_{k=1}^{K}$ are the weights and nodes of the univariate Gauss-Hermite quadrature.
+where $\{\tilde{z}_k, w_k\}_{k=1}^{K}$ are the weights and nodes of the univariate Gauss-Hermite quadrature, see
 
-### Key variational inference concepts in this model / implementation
+`class LikelihoodLogistic(nn.Module)` for implementation. Alternatively, we can also use Monte-Carlo sampling as explained below.
+
+### Key variational inference concepts in this model/implementation
 
 The approximation of the EBLO objective in implemented in the function.
 
@@ -92,13 +94,13 @@ please follow the implementation there.
 
 #### Batch learning
 
-For large datasets it is often infeasible to use all training data in each training step, for example, due to memory restrictions, therefore, we use the approximation
+For large datasets it is often infeasible to use all training data in each training step, for example, due to memory restrictions. Therefore, we use the approximation
 $$
 \begin{align}
 	\sum_{i=1}^{n}\mathbb{E}_{q_{\phi}(w)}[\log p(y_i \vert x_i, w)]  \approx n \frac{1}{\vert S\vert} \sum_{s \in S}\mathbb{E}_{q_{\phi}(w)}[\log p(y_i \vert x_s, w)],
 \end{align}
 $$
-that is, we approximate the objective by using only a random subset $S \subseteq \{1, \ldots, N\}$ to represent the data. This makes the objective stochastic w.r.t. sampling $S$ but with the right optimisation procedure (stochastic gradient descent with decaying learning rates) convergence can still be achieved. 
+that is, we approximate the objective by using only a random subset $S \subseteq \{1, \ldots, N\}$ to represent the data. This makes the objective stochastic w.r.t. sampling $S$ but with the right optimisation procedure (stochastic gradient descent with decaying learning rates) convergence can still be achieved or guaranteed (Robbins-Monro). 
 
 **Implementation** This concept is implemented via the `DataModuleFromNPZ` in `run.py` which uses data batches of size `size_batch`, see 
 
@@ -128,9 +130,9 @@ $$
 	\mathbb{E}_{q_{\phi}(w)}[\log p(y_i \vert x_s, w)] \approx \frac{1}{ R } \sum_{w^{(r)} \sim q(w)} \log p(y_i \vert x_s, w^{(r)}),
 \end{align}
 $$
-that is, we sample $R$ samples $w^{(r)} \sim q(w)$ and average. This also makes the objective stochastic but we hope that with the right number of samples and the right optimisation procedure the optimisation can still converge (see above). 
+that is, we sample $R$ samples $w^{(r)} \sim q(w)$ and average. This also makes the objective stochastic but we hope that with the right number of samples and the right optimisation procedure the optimisation can still converge.
 
-**Implementation** This is implemented in line by using 
+**Implementation** This is implemented in 
 
 ```
 # data distribution via MC samples
@@ -152,16 +154,16 @@ $$
 then we can rewrite expectations w.r.t $p_{\theta}(s)$ as expectation w.r.t. the base distribution $p_{0}(\epsilon)$. For example, for a function $g()$ we can write and approximate the expectations as 
 $$
 \begin{align}
-	\mathbb{E}_{p(z)}[g(z)] = \mathbb{E}_{p_{0}(\epsilon)}[g(f_{\theta}(\epsilon))] \approx \frac{1}{R}\sum_{\epsilon^{(r)} \sim p_{0}(\epsilon)}g(f_{\theta}(\epsilon^{(r)}).
+	\mathbb{E}_{p_{\theta}(z)}[g(z)] = \mathbb{E}_{p_{0}(\epsilon)}[g(f_{\theta}(\epsilon))] \approx \frac{1}{R}\sum_{\epsilon^{(r)} \sim p_{0}(\epsilon)}g(f_{\theta}(\epsilon^{(r)}).
 \end{align}
 $$
 This makes the MC estimates of expectations easily computable and differentiable w.r.t. $\theta$, that is, 
 $$
 \partial_{\theta}\mathbb{E}_{p(z)}[g(z)] = \mathbb{E}_{p_{0}(\epsilon)}[\partial g(f_{\theta}(\epsilon)) \partial_{\theta}f_{\theta}(\epsilon)] \approx \frac{1}{R}\sum_{\epsilon_r \sim p_{0}(\epsilon)}\partial g(f_{\theta}(\epsilon)) \partial_{\theta}f_{\theta}(\epsilon).
 $$
-In our model we have $w =  \mu +  L \epsilon, LL^{T}=\Sigma, \epsilon \sim \mathcal{N}(0, I)$. Hence we can use Monte-Carlo samples from $\epsilon$ to approximate the objective and easily differentiate the approximation. Since we need a positive definite $\Sigma$, and this an $L$ with a positive diagonal,  we use a parameterisation $L = L_{\mathrm{lower}} + \mathrm{diag}(e^{\gamma})$, where $L_{\mathrm{lower}}$ is a strictly lower triangular matrix and $\gamma \in \mathbb{R}^{d}$ .
+In our model we have $w =  \mu +  L \epsilon, LL^{T}=\Sigma, \epsilon \sim \mathcal{N}(0, I)$, therefore,  we can use Monte-Carlo samples from $\epsilon$ to approximate the objective and easily differentiate the approximation. Since we need a positive definite $\Sigma$ which requires an $L$ with a positive diagonal,  we use a parameterisation $L = L_{\mathrm{lower}} + \mathrm{diag}(e^{\gamma})$, where $L_{\mathrm{lower}}$ is a strictly lower triangular matrix and $\gamma \in \mathbb{R}^{d}$ .
 
-**Implementation** This is implemented in lines
+**Implementation** This is implemented in
 
 ```
 # reparameterisation of stochastic variables
@@ -176,7 +178,7 @@ def weights_chol(self):
     return torch.tril(self.weights_scale_lower, -1) + torch.diag(torch.exp(self.weights_scale_logdiag))
 ```
 
-and the parameterisation is defined the `__init__` function in lines
+and the parameterisation is defined in the `__init__` function in lines
 
 ```
 self.weights_loc           = nn.Parameter(torch.zeros((self.dim,1)), requires_grad=True) 
@@ -186,7 +188,7 @@ self.weights_scale_lower   = nn.Parameter(torch.zeros((self.dim, self.dim)), req
 
 #### Local reparameterisation
 
-We observe that the likelihood terms $\mathrm{Bernoulli}(y_i; x_i w )$ depend only on $x_i w$ hence instead to sampling from $w \sim q(w) = \mathcal{N}(\mu, \Sigma)$ we can sample from $z_i=x_iw \sim \mathcal{N}(x_i^{T}\mu, x_i^{T}\Sigma x_i)$, that is
+We can observe that the likelihood terms $\mathrm{Bernoulli}(y_i; x_i w )$ depend only on $x_i w$ hence instead to sampling from $w \sim q(w) = \mathcal{N}(\mu, \Sigma)$ we can sample from $z_i=x_iw \sim \mathcal{N}(x_i^{T}\mu, x_i^{T}\Sigma x_i)$, that is
 $$
 \begin{align}
 	\mathbb{E}_{q_{\phi}(w)}[\log \mathrm{Bernoulli}(y_i; x_i w )] 
@@ -202,7 +204,7 @@ $$
 $$
 thus significantly reducing the variance of the stochastic approximation of the objective, the latter step is implemented in `pytorch` in `Normal(loc=z_loc, scale=z_scale).rsample([self.n_samples_mc])`.
 
-**Implementation** Approximating the expectations and by using all the steps detailed above is implemented in
+**Implementation** Approximating the expectations and using all the approximation steps detailed above we obtain
 
 ```
 # local reparameterisation and MCsampling
@@ -222,7 +224,9 @@ For the logistic regression model detailed above
 
 - Run the code with `python run.py` and check metrics with `tensorboard --logdir lightning_logs` .
 - Change `batch_size`, `n_samples_mc`, `max_epochs`, `lr` and the optimisation algorithm, what do you notice?
-- Try to implement the diagonal version of `class ModelLogisicRegressionMvn(LightningModule)`, what changes do you have to make? What advantaged does this method have when the number of features $d$ is large? Hint: you need to compute `z_scale` and in a different way and use `Normal` instead of `MultivariateNormal` to compute the KL divergence.
+- Try to implement the diagonal version of `class ModelLogisicRegressionMvn(LightningModule)`. What changes do you have to make? What advantages does this method have when the number of features $d$ is large? Hint: you need to compute `z_scale` and in a different way and use `Normal` instead of `MultivariateNormal` to compute the KL divergence.
+
+- How would you change the model to do classification on linearly non-separable data?
 
 - Compare for $q_{\phi}(w; Y, X)  =\mathcal{N}(w; \mu, \Sigma)$ and $q_{\phi}(w; Y, X)  =\mathcal{N}(w; \mu, \mathrm{diag}(\sigma^2))$ .
   - What are the differences in terms of storage and computational complexity?
@@ -235,18 +239,18 @@ For the logistic regression model detailed above
 
 ## Unsupervised handwritten digit recognition / variational auto-encoder
 
-Variational auto-encoders are unsupervised models that learn to embed and generate new data similar to one in an i.i.d. dataset $X = [x_1, \ldots, x_n]^{T}$. They are Bayesian models where the distribution of the data is
+Variational auto-encoders are unsupervised models that learn to embed and generate new data similar to one in an i.i.d. dataset $X = [x_1, \ldots, x_n]^{T}$. They are Bayesian models where the distribution of the data is defined as
 $$
 \begin{align}
 	p_{\theta}(X) = \prod_{i=1}^{n} \int\,dz_i \: p_{\theta}(x_i \vert z_i)\:p(z_i).
 \end{align}
 $$
-and learning is done by maximising the likelihood $p_{\theta}(X)$ w.r.t. the model parameters $\theta$. It is hoped that after learning
+and learning is done by maximising the likelihood $p_{\theta}(X)$ w.r.t. the model parameters $\theta$. After successful training the following properties should hold
 
-- samples $z \sim p(z), x\sim p(x \vert z)$  generate date similar to that in $X$
-- the Bayesian posteriors $p(z \vert x)$ embed the data in a space where components of $z$ or the new dataset $z \sim p(z_i \vert x_i)$ can tell us more about the data, say, the embedding cluster nicely. 
+- samples $z \sim p(z), x\sim p(x \vert z)$  generate data similar to those in $X$
+- the Bayesian posteriors $p(z \vert x)$ embed the data in a space where components of $z$ or the new dataset $z \sim p(z_i \vert x_i)$ can tell us more about the data, say, the embedding cluster nicely, relevant variations in features align along the axes, etc 
 
-Where generally we have 
+Where generally choose 
 $$
 \begin{align}
 	p_{\theta}(x_{i}\vert z_{i}) = \mathcal{N}(x_i; \mathrm{NN}^{\mathrm{dec}}_{\theta_{\mu}}(z_i), \theta_{\sigma^2} I_d)
@@ -266,7 +270,7 @@ q_{\phi}(z_i;x) = \mathcal{N}(z_i;\mathrm{NN}^{\mathrm{enc-mean}}_{\phi_{\mu}}(x
 $$
 Please check the lecture slides/video for more details.
 
-The function to optimise is the negative evidence lower bound for this model
+The function to optimise the negative ELBO for this model is
 $$
 \begin{align}
 	L(\theta, \phi; X) = 
@@ -275,7 +279,7 @@ $$
 \end{align}
 $$
 
-which now also has to be optimised w.r.t. the model parameters $\theta$. Note that we did not have this in the logistic regression model.
+which now also has to be optimised w.r.t. the model parameters $\theta$. Note that we did not do this in the logistic regression model because we had a very limited number of model parameters.
 
 **Implementation** The parameters of the distributions are implemented via a pair of neural networks. The decoder implements  $p_{\theta}(x_i \vert z_i)$ while the encoder implements $q_{\phi}(z_i; x_i) $ .
 
@@ -317,7 +321,7 @@ def loss(self, imgs):
 
 #### Expectation Maximisation
 
-In this model we not only have to approximate $p_{\theta}(z_i \vert x_i)$ but we also need to maximise the lower bound with respext to the model parameters $\theta$., that is we jointly maximise the w.r.t. the model parameters and the posterior approximation $q_{\phi}(z_i;x_i)$.
+In this model we not only have to approximate $p_{\theta}(z_i \vert x_i)$ but we also need to maximise the lower bound with respext to the model parameters $\theta$., that is we jointly maximise the ELBO w.r.t. the model parameters $\theta$ and the posterior approximation's parameters $\phi$.
 
 **Implementation**  joint learning is implemented via a single optimiser
 
@@ -331,7 +335,7 @@ def configure_optimizers(self):
 
 #### Amortised variational inference
 
-If we would proceed according to the logistic regression model we would have to approximate each $p_{\theta}(z_i\vert x_i)$ in a separate inner loop for each new $\theta$ value. Instead we learn $q_{\phi}(z_i; x_i) \approx p_{\theta}(z_i \vert x_i)$ thus replacing the variational inference algorithm to learn $q_{\phi}(z_i; x_i)$ with learning the parameter mappings $\mathrm{NN}^{\mathrm{enc-mean}}_{\phi_{\mu}}(x_i)$ and $\mathrm{NN}^{\mathrm{enc-var}}_{\theta_{\mu}}(x_i)$.  
+If we would proceed according to the logistic regression model, we would have to approximate each $p_{\theta}(z_i\vert x_i)$ in a separate inner loop for each new $\theta$ value. Instead we learn $q_{\phi}(z_i; x_i) \approx p_{\theta}(z_i \vert x_i)$ thus replacing the variational inference algorithm to learn $q_{\phi}(z_i; x_i)$ with learning the parameter mappings $\mathrm{NN}^{\mathrm{enc-mean}}_{\phi_{\mu}}(x_i)$ and $\mathrm{NN}^{\mathrm{enc-var}}_{\theta_{\mu}}(x_i)$.  
 
 ```
 q_zx = torch.distributions.normal.Normal(*self.encoder(imgs.view([size_batch] + self.encoder.shape_input)))
